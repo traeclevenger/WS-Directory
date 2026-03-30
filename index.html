@@ -353,13 +353,19 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['members','map'][i] === tab));
   document.getElementById('membersView').style.display = tab === 'members' ? 'block' : 'none';
   document.getElementById('mapView').style.display = tab === 'map' ? 'block' : 'none';
-  if (tab === 'map' && !mapInitialized && typeof google !== 'undefined') {
-    initMap();
+  if (tab === 'map' && !mapInitialized && window.googleMapsReady) {
+    setupMap();
   }
 }
 
 // ── GOOGLE MAPS ──────────────────────────────────────────────
 function initMap() {
+  // Called automatically by Google Maps API on load
+  window.googleMapsReady = true;
+  if (currentTab === 'map') setupMap();
+}
+
+function setupMap() {
   mapInitialized = true;
   document.getElementById('mapNotice').style.display = 'none';
   map = new google.maps.Map(document.getElementById('map'), {

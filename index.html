@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Westside Church Member Directory</title>
+<link rel="icon" type="image/png" href="WS favicon.png">
 <style>
   :root {
     --bg: #0f1117;
@@ -22,31 +23,23 @@
 
   /* HEADER */
   header {
-    background: linear-gradient(135deg, #12152a 0%, #1e2240 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 20px 24px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #d8d8d8;
+    padding: 16px 24px 14px;
     position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
   }
-  .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .header-icon {
-    width: 40px; height: 40px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px; flex-shrink: 0;
-  }
-  header h1 { font-size: 1.3rem; font-weight: 700; color: var(--text); }
-  header p { font-size: 0.78rem; color: var(--subtext); }
+  .site-logo { display: block; height: 44px; width: auto; margin-bottom: 12px; }
   .search-wrap { position: relative; }
-  .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--subtext); pointer-events: none; }
+  .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
   #searchInput {
-    width: 100%; padding: 12px 14px 12px 42px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 10px; color: var(--text);
+    width: 100%; padding: 11px 14px 11px 42px;
+    background: #f3f3f3; border: 1px solid #d0d0d0;
+    border-radius: 10px; color: #1a1a1a;
     font-size: 0.95rem; outline: none; transition: border-color 0.2s;
   }
-  #searchInput:focus { border-color: var(--accent); }
-  #searchInput::placeholder { color: var(--subtext); }
+  #searchInput:focus { border-color: #6b9e6b; background: #fff; }
+  #searchInput::placeholder { color: #999; }
 
   /* TABS */
   .tabs { display: flex; gap: 4px; padding: 12px 16px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -132,13 +125,7 @@
 <body>
 
 <header>
-  <div class="header-top">
-    <div class="header-icon">⛪</div>
-    <div>
-      <h1>Westside Member Directory</h1>
-      <p id="memberCount">Loading records...</p>
-    </div>
-  </div>
+  <img src="WS logo.png" alt="Westside church of Christ" class="site-logo">
   <div class="search-wrap">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="text" id="searchInput" placeholder="Search by name, address, phone, email, or photo description…" autocomplete="off">
@@ -346,7 +333,6 @@ let currentTab = 'members';
 let mapInitialized = false;
 let map, markers = [], infoWindow;
 
-document.getElementById('memberCount').textContent = `${MEMBERS.length} records`;
 document.getElementById('searchInput').addEventListener('input', doSearch);
 renderMembers(MEMBERS);
 updateCount(MEMBERS.length);

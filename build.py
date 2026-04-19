@@ -76,6 +76,7 @@ for fam in families:
         f"phone:{js_str(fam.get('family_phone'))},"
         f"photoFile:{js_str(fam.get('photo_file'))},"
         f"photoDesc:{js_str(fam.get('photo_description'))},"
+        f"photoPos:{fam.get('photo_y_position', 0)},"
         f"memberContact:{js_str(member_contact)},"
         f"members:[{','.join(members_js)}]"
         "}"
@@ -153,7 +154,7 @@ html = r"""<!DOCTYPE html>
   .member-card:hover { transform: translateY(-2px); border-color: var(--accent); }
   .member-photo {
     width: 72px; height: 72px; border-radius: 10px;
-    object-fit: cover; object-position: top;
+    object-fit: cover; object-position: center 0%;
     flex-shrink: 0;
     background: var(--surface2); border: 2px solid var(--border);
   }
@@ -177,7 +178,7 @@ html = r"""<!DOCTYPE html>
   .modal-overlay.open { display: flex; }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; max-width: 480px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6); overflow: hidden; animation: slideUp 0.2s ease; max-height: 90vh; overflow-y: auto; }
   @keyframes slideUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
-  .modal-photo { width: 100%; height: 220px; object-fit: cover; object-position: top; background: var(--surface2); display: block; }
+  .modal-photo { width: 100%; height: 220px; object-fit: cover; object-position: center 0%; background: var(--surface2); display: block; }
   .modal-photo.placeholder-large { display: flex; align-items: center; justify-content: center; font-size: 72px; color: var(--subtext); height: 220px; }
   .modal-body { padding: 20px; }
   .modal-name { font-size: 1.3rem; font-weight: 800; margin-bottom: 16px; color: var(--text); }
@@ -205,6 +206,8 @@ html = r"""<!DOCTYPE html>
   }
   .contact-link:hover { background: rgba(130,144,134,0.30); }
   .contact-link svg { flex-shrink: 0; }
+  .addr-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; transition: color 0.15s; }
+  .addr-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
   /* RESPONSIVE */
   @media (max-width: 600px) { .members-grid { grid-template-columns: 1fr; } header h1 { font-size: 1.1rem; } }
@@ -251,7 +254,7 @@ MEMBERS_DATA_PLACEHOLDER
 let filtered = [...MEMBERS];
 let currentTab = 'members';
 let mapInitialized = false;
-let map, markers = [], infoWindow;
+let map, markers = [], markerByIdx = {}, infoWindow;
 
 document.getElementById('searchInput').addEventListener('input', doSearch);
 
@@ -312,15 +315,16 @@ function renderMembers(list, query='') {
   }
   grid.innerHTML = list.map(m => {
     const idx = MEMBERS.indexOf(m);
+    const yPos = m.photoPos || 0;
     const photoHtml = m.photoFile
-      ? `<img class="member-photo" src="${esc(m.photoFile)}" alt="${esc(m.name)}" loading="lazy">`
+      ? `<img class="member-photo" src="${esc(m.photoFile)}" alt="${esc(m.name)}" loading="lazy" style="object-position:center ${yPos}%">`
       : `<div class="member-photo placeholder">👤</div>`;
     const displayPhone = m.phone || (m.members.length > 0 && m.members[0].ph) || null;
     return `<div class="member-card" onclick="openModal(${idx})">
       ${photoHtml}
       <div class="member-info">
         <div class="member-name">${highlight(m.name, query)}</div>
-        ${m.addr ? `<div class="member-detail">${addrIcon}<span>${highlight(m.addr, query)}</span></div>` : ''}
+        ${m.addr ? `<div class="member-detail">${addrIcon}<span class="addr-link" onclick="event.stopPropagation();goToMap(${idx})">${highlight(m.addr, query)}</span></div>` : ''}
         ${displayPhone ? `<div class="member-detail">${phoneIcon}<span>${highlight(displayPhone, query)}</span></div>` : ''}
       </div>
     </div>`;
@@ -329,8 +333,9 @@ function renderMembers(list, query='') {
 
 function openModal(idx) {
   const m = MEMBERS[idx];
+  const yPos = m.photoPos || 0;
   const photoHtml = m.photoFile
-    ? `<img class="modal-photo" src="${esc(m.photoFile)}" alt="${esc(m.name)}">`
+    ? `<img class="modal-photo" src="${esc(m.photoFile)}" alt="${esc(m.name)}" style="object-position:center ${yPos}%">`
     : `<div class="modal-photo placeholder-large">👤</div>`;
 
   // Build members list HTML
@@ -368,7 +373,7 @@ function openModal(idx) {
     ${photoHtml}
     <div class="modal-body">
       <div class="modal-name">${esc(m.name)}</div>
-      ${m.addr ? `<div class="modal-row"><span class="modal-label">Address</span><span class="modal-value">${esc(m.addr)}</span></div>` : ''}
+      ${m.addr ? `<div class="modal-row"><span class="modal-label">Address</span><span class="modal-value addr-link" onclick="goToMap(${idx})">${esc(m.addr)}</span></div>` : ''}
       ${familyPhoneHtml}
       ${m.members.length ? `<div class="modal-row" style="flex-direction:column;align-items:stretch">
         <div class="members-section">
@@ -412,14 +417,16 @@ function setupMap() {
     ]
   });
   infoWindow = new google.maps.InfoWindow();
-  geocodeAndPlot(MEMBERS);
+  geocodeAndPlot(filtered);
 }
 
 function geocodeAndPlot(list) {
   const geocoder = new google.maps.Geocoder();
   markers.forEach(m => m.setMap(null));
   markers = [];
+  markerByIdx = {};
   list.filter(m => m.addr).forEach((m, i) => {
+    const idx = MEMBERS.indexOf(m);
     setTimeout(() => {
       geocoder.geocode({ address: m.addr + ', TX' }, (results, status) => {
         if (status === 'OK') {
@@ -429,7 +436,7 @@ function geocodeAndPlot(list) {
             icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#829086', fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 2 }
           });
           const photoHtml = m.photoFile
-            ? `<img src="${esc(m.photoFile)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover;object-position:top;float:left;margin-right:10px;">`
+            ? `<img src="${esc(m.photoFile)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover;object-position:center ${m.photoPos||0}%;float:left;margin-right:10px;">`
             : '';
           marker.addListener('click', () => {
             infoWindow.setContent(`<div style="font-family:sans-serif;color:#111;max-width:220px">
@@ -441,13 +448,36 @@ function geocodeAndPlot(list) {
             infoWindow.open(map, marker);
           });
           markers.push(marker);
+          markerByIdx[idx] = marker;
         }
       });
     }, i * 150);
   });
 }
 
-function updateMapMarkers(list) { markers.forEach(m => m.setMap(null)); markers = []; geocodeAndPlot(list); }
+function updateMapMarkers(list) { markers.forEach(m => m.setMap(null)); markers = []; markerByIdx = {}; geocodeAndPlot(list); }
+
+function goToMap(idx) {
+  closeModalBtn();
+  switchTab('map');
+  function tryNav() {
+    const marker = markerByIdx[idx];
+    if (marker) {
+      map.panTo(marker.getPosition());
+      map.setZoom(14);
+      google.maps.event.trigger(marker, 'click');
+    } else {
+      setTimeout(tryNav, 400);
+    }
+  }
+  if (mapInitialized) {
+    setTimeout(tryNav, 100);
+  } else {
+    const wait = setInterval(() => {
+      if (mapInitialized) { clearInterval(wait); setTimeout(tryNav, 200); }
+    }, 200);
+  }
+}
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW6GTHyk6J7Xp4yp2t-9PE1l_YXuNH40Q&callback=initMap"></script>
 </body>

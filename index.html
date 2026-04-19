@@ -7,15 +7,15 @@
 <link rel="icon" type="image/png" href="WS favicon.png">
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #22263a;
-    --accent: #4f8ef7;
-    --accent2: #7c5cbf;
-    --text: #e8eaf0;
-    --subtext: #8a8fa8;
-    --border: #2e3248;
-    --card-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --bg: #0d1210;
+    --surface: #141c18;
+    --surface2: #1d2820;
+    --accent: #96aa9e;
+    --accent2: #6a7e72;
+    --text: #eaedea;
+    --subtext: #7a9082;
+    --border: #2a3830;
+    --card-shadow: 0 4px 24px rgba(0,0,0,0.5);
     --radius: 14px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,7 +29,7 @@
     position: sticky; top: 0; z-index: 100;
     box-shadow: 0 2px 12px rgba(0,0,0,0.12);
   }
-  .site-logo { display: block; height: 44px; width: auto; margin-bottom: 12px; }
+  .site-logo { display: block; height: 64px; width: auto; margin-bottom: 14px; }
   .search-wrap { position: relative; }
   .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
   #searchInput {
@@ -38,7 +38,7 @@
     border-radius: 10px; color: #1a1a1a;
     font-size: 0.95rem; outline: none; transition: border-color 0.2s;
   }
-  #searchInput:focus { border-color: #6b9e6b; background: #fff; }
+  #searchInput:focus { border-color: #829086; background: #fff; }
   #searchInput::placeholder { color: #999; }
 
   /* TABS */
@@ -74,7 +74,7 @@
   .member-name { font-size: 0.95rem; font-weight: 700; color: var(--text); margin-bottom: 5px; line-height: 1.3; }
   .member-detail { display: flex; align-items: flex-start; gap: 6px; font-size: 0.78rem; color: var(--subtext); margin-top: 4px; line-height: 1.4; }
   .member-detail svg { flex-shrink: 0; margin-top: 1px; }
-  .highlight { background: rgba(79,142,247,0.25); border-radius: 3px; padding: 0 2px; color: var(--accent); }
+  .highlight { background: rgba(130,144,134,0.30); border-radius: 3px; padding: 0 2px; color: var(--accent); }
 
   /* MAP */
   #mapView { display: none; }
@@ -112,10 +112,10 @@
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 0.8rem; color: var(--accent);
     text-decoration: none; padding: 3px 8px;
-    background: rgba(79,142,247,0.12); border-radius: 6px;
+    background: rgba(130,144,134,0.15); border-radius: 6px;
     transition: background 0.15s;
   }
-  .contact-link:hover { background: rgba(79,142,247,0.25); }
+  .contact-link:hover { background: rgba(130,144,134,0.30); }
   .contact-link svg { flex-shrink: 0; }
 
   /* RESPONSIVE */
@@ -506,7 +506,7 @@ function geocodeAndPlot(list) {
           const pos = results[0].geometry.location;
           const marker = new google.maps.Marker({
             position: pos, map, title: m.name,
-            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#4f8ef7', fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 2 }
+            icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#829086', fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 2 }
           });
           const photoHtml = m.photoFile
             ? `<img src="${esc(m.photoFile)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover;object-position:top;float:left;margin-right:10px;">`

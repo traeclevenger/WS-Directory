@@ -272,18 +272,46 @@ function phoneDigits(ph) {
   return (ph || '').replace(/\D/g, '');
 }
 
+const SYNONYMS = [
+  ['glasses','spectacles','eyeglasses','specs'],
+  ['gray','grey'],
+  ['blonde','blond'],
+  ['bald','no hair','shaved head'],
+  ['mustache','moustache'],
+  ['redhead','red hair','ginger'],
+  ['brunette','brown hair'],
+  ['african american','black'],
+  ['hispanic','latino','latina'],
+  ['caucasian','white'],
+  ['elderly','older','senior'],
+  ['young adult','younger'],
+  ['beard','bearded','facial hair'],
+  ['curly','wavy'],
+];
+
+function expandQuery(q) {
+  const terms = [q];
+  for (const group of SYNONYMS) {
+    if (group.some(s => q.includes(s))) {
+      group.forEach(s => { if (!q.includes(s)) terms.push(s); });
+    }
+  }
+  return terms;
+}
+
 function doSearch() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   if (!q) {
     filtered = [...MEMBERS];
   } else {
-    filtered = MEMBERS.filter(m =>
-      (m.name || '').toLowerCase().includes(q) ||
-      (m.addr || '').toLowerCase().includes(q) ||
-      (m.phone || '').toLowerCase().includes(q) ||
-      (m.photoDesc || '').toLowerCase().includes(q) ||
-      (m.memberContact || '').toLowerCase().includes(q)
-    );
+    const terms = expandQuery(q);
+    filtered = MEMBERS.filter(m => {
+      const desc = (m.photoDesc || '').toLowerCase();
+      const hay = [m.name, m.addr, m.phone, m.memberContact].map(s => (s||'').toLowerCase()).join(' ');
+      return terms.some(t =>
+        hay.includes(t) || desc.includes(t)
+      );
+    });
   }
   if (currentTab === 'members') {
     renderMembers(filtered, q);

@@ -133,13 +133,25 @@ html = r"""<!DOCTYPE html>
   .search-wrap { position: relative; }
   .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
   #searchInput {
-    width: 100%; padding: 11px 14px 11px 42px;
+    width: 100%; padding: 11px 36px 11px 42px;
     background: #f3f3f3; border: 1px solid #d0d0d0;
     border-radius: 10px; color: #1a1a1a;
     font-size: 0.95rem; outline: none; transition: border-color 0.2s;
+    -webkit-appearance: none;
   }
   #searchInput:focus { border-color: #829086; background: #fff; }
   #searchInput::placeholder { color: #999; }
+  /* suppress native clear button since we have our own */
+  #searchInput::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  #clearBtn {
+    display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 20px; border-radius: 50%; border: none; cursor: pointer;
+    background: #bbb; color: #fff; font-size: 13px; line-height: 1;
+    align-items: center; justify-content: center; padding: 0;
+    transition: background 0.15s;
+  }
+  #clearBtn.visible { display: flex; }
+  #clearBtn:hover { background: #999; }
 
   /* TABS */
   .tabs { display: flex; gap: 4px; padding: 12px 16px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -241,6 +253,7 @@ html = r"""<!DOCTYPE html>
   <div class="search-wrap">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="search" id="searchInput" placeholder="Search by name, address, phone, email, or photo description…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="clearBtn" aria-label="Clear search" onclick="clearSearch()">✕</button>
   </div>
 </header>
 
@@ -330,8 +343,18 @@ function setSearchHint(msg) {
 // Start loading the model as soon as the user types anything
 document.getElementById('searchInput').addEventListener('input', (e) => {
   if (e.target.value.trim() && !semanticReady && !semanticLoading) loadSemanticModel();
+  document.getElementById('clearBtn').classList.toggle('visible', e.target.value.length > 0);
   doSearch();
 });
+
+function clearSearch() {
+  const input = document.getElementById('searchInput');
+  input.value = '';
+  input.focus();
+  document.getElementById('clearBtn').classList.remove('visible');
+  filtered = [...MEMBERS];
+  render(filtered, '');
+}
 
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

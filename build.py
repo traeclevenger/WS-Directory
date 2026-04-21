@@ -84,7 +84,18 @@ for fam in families:
 
 members_js_array = "const MEMBERS = [\n  " + ",\n  ".join(rows) + "\n];"
 
-print(f"Built MEMBERS array: {len(rows)} families")
+# ── Build EMBEDDINGS array (Float32, one row per family) ──────────────────────
+emb_rows = []
+for fam in families:
+    emb = fam.get("photo_embedding")
+    if emb:
+        emb_rows.append(f"new Float32Array([{','.join(str(v) for v in emb)}])")
+    else:
+        emb_rows.append("null")
+
+embeddings_js = "const EMBEDDINGS = [\n  " + ",\n  ".join(emb_rows) + "\n];"
+
+print(f"Built MEMBERS array: {len(rows)} families, {sum(1 for f in families if f.get('photo_embedding'))} with embeddings")
 
 # ── Write index.html ─────────────────────────────────────────────────────────
 html = r"""<!DOCTYPE html>
@@ -250,13 +261,67 @@ html = r"""<!DOCTYPE html>
 
 <script>
 MEMBERS_DATA_PLACEHOLDER
+EMBEDDINGS_PLACEHOLDER
 
 let filtered = [...MEMBERS];
 let currentTab = 'members';
 let mapInitialized = false;
 let map, markers = [], markerByIdx = {}, infoWindow;
 
-document.getElementById('searchInput').addEventListener('input', doSearch);
+// ── Semantic search state ──────────────────────────────────────────────────
+let semanticReady = false;
+let semanticLoading = false;
+let embedFn = null;   // set once Transformers.js is ready
+
+const TRANSFORMERS_CDN = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+const EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
+const SEMANTIC_THRESHOLD = 0.40;  // cosine similarity cutoff (tuned empirically)
+
+function cosineSim(a, b) {
+  // Both vectors are already L2-normalised (normalize_embeddings=True at build time)
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+async function loadSemanticModel() {
+  if (semanticReady || semanticLoading) return;
+  semanticLoading = true;
+  setSearchHint('Loading semantic model… (first time only, ~22 MB)');
+  try {
+    const { pipeline } = await import(`${TRANSFORMERS_CDN}/dist/transformers.min.js`);
+    const pipe = await pipeline('feature-extraction', EMBED_MODEL, { quantized: true });
+    embedFn = async (text) => {
+      const out = await pipe(text, { pooling: 'mean', normalize: true });
+      return new Float32Array(out.data);
+    };
+    semanticReady = true;
+    setSearchHint('');
+    // Re-run current search now that model is ready
+    doSearch();
+  } catch(e) {
+    console.error('Semantic model load failed:', e);
+    setSearchHint('Semantic model unavailable — using keyword search');
+    semanticLoading = false;
+  }
+}
+
+function setSearchHint(msg) {
+  let el = document.getElementById('searchHint');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'searchHint';
+    el.style.cssText = 'font-size:0.75rem;color:var(--subtext);margin-top:6px;padding-left:2px;min-height:1em;';
+    document.querySelector('.search-wrap').after(el);
+  }
+  el.textContent = msg;
+}
+
+// Start loading the model as soon as the user types anything
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  if (e.target.value.trim() && !semanticReady && !semanticLoading) loadSemanticModel();
+  doSearch();
+});
 
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -299,25 +364,72 @@ function expandQuery(q) {
   return terms;
 }
 
+function keywordMatch(m, terms) {
+  const desc = (m.photoDesc || '').toLowerCase();
+  const hay = [m.name, m.addr, m.phone, m.memberContact].map(s => (s||'').toLowerCase()).join(' ');
+  return terms.some(t => hay.includes(t) || desc.includes(t));
+}
+
+// Debounce handle for async semantic search
+let _searchTimer = null;
+
+function isDescriptiveQuery(q) {
+  // Use semantic search for 3+ word queries
+  // Short queries (names, phone, zip, single words) stay as keyword
+  return q.split(/\s+/).length >= 3;
+}
+
 function doSearch() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   if (!q) {
     filtered = [...MEMBERS];
-  } else {
-    const terms = expandQuery(q);
-    filtered = MEMBERS.filter(m => {
-      const desc = (m.photoDesc || '').toLowerCase();
-      const hay = [m.name, m.addr, m.phone, m.memberContact].map(s => (s||'').toLowerCase()).join(' ');
-      return terms.some(t =>
-        hay.includes(t) || desc.includes(t)
-      );
-    });
+    render(filtered, q);
+    return;
   }
-  if (currentTab === 'members') {
-    renderMembers(filtered, q);
-    updateCount(filtered.length);
+
+  const terms = expandQuery(q);
+  const descriptive = isDescriptiveQuery(q);
+
+  // Short queries (name, phone, zip) → keyword only, instant
+  if (!descriptive) {
+    filtered = MEMBERS.filter(m => keywordMatch(m, terms));
+    render(filtered, q);
+    return;
+  }
+
+  // Descriptive phrase (3+ words) → semantic search ranked by similarity
+  if (semanticReady && embedFn) {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(async () => {
+      const queryVec = await embedFn(q);
+      const scored = MEMBERS.map((m, i) => {
+        const emb = EMBEDDINGS[i];
+        const sim = emb ? cosineSim(queryVec, emb) : 0;
+        return { m, sim };
+      }).filter(x => x.sim >= SEMANTIC_THRESHOLD)
+        .sort((a, b) => b.sim - a.sim);
+
+      // If semantic returns nothing, fall back to keyword
+      filtered = scored.length > 0
+        ? scored.map(x => x.m)
+        : MEMBERS.filter(m => keywordMatch(m, terms));
+      setSearchHint('');
+      render(filtered, q);
+    }, 120);
   } else {
-    if (mapInitialized) updateMapMarkers(filtered);
+    // Model still loading — show all results with a hint
+    filtered = [...MEMBERS];
+    render(filtered, q);
+    setSearchHint('⏳ Loading semantic model… results will refine shortly.');
+  }
+}
+
+function render(list, q) {
+  if (currentTab === 'members') {
+    renderMembers(list, q);
+    updateCount(list.length);
+  } else {
+    if (mapInitialized) updateMapMarkers(list);
   }
 }
 
@@ -512,6 +624,7 @@ function goToMap(idx) {
 </html>"""
 
 html = html.replace('MEMBERS_DATA_PLACEHOLDER', members_js_array)
+html = html.replace('EMBEDDINGS_PLACEHOLDER', embeddings_js)
 
 out = REPO_DIR / "index.html"
 out.write_text(html, encoding="utf-8")

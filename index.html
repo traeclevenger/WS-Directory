@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Westside Church Member Directory</title>
 <link rel="icon" type="image/png" href="WS favicon.png">
 <style>
@@ -117,11 +117,21 @@
   }
   .contact-link:hover { background: rgba(130,144,134,0.30); }
   .contact-link svg { flex-shrink: 0; }
-  .addr-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; transition: color 0.15s; }
+  .addr-link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; transition: color 0.15s; display: inline-block; min-height: 44px; display: flex; align-items: center; }
   .addr-link:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
   /* RESPONSIVE */
-  @media (max-width: 600px) { .members-grid { grid-template-columns: 1fr; } header h1 { font-size: 1.1rem; } }
+  @media (max-width: 600px) {
+    .members-grid { grid-template-columns: 1fr; }
+    header h1 { font-size: 1.1rem; }
+    /* Full-screen modal on small screens */
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal { max-width: 100%; border-radius: 18px 18px 0 0; max-height: 92vh; }
+    .modal-wrapper { width: 100%; }
+    /* Safe area for home indicator */
+    .modal-body { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+    body { padding-bottom: env(safe-area-inset-bottom); }
+  }
 </style>
 </head>
 <body>
@@ -130,7 +140,7 @@
   <img src="WS logo.png" alt="Westside church of Christ" class="site-logo">
   <div class="search-wrap">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input type="text" id="searchInput" placeholder="Search by name, address, phone, email, or photo description…" autocomplete="off">
+    <input type="search" id="searchInput" placeholder="Search by name, address, phone, email, or photo description…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
   </div>
 </header>
 

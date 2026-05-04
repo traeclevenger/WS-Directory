@@ -3,7 +3,10 @@
 Build index.html from families.json + photos.
 Run from the WS-Directory repo root:
   python3 build.py
-Requires families.json and photos/ to be in ../WS\ Directory/
+Requires families.json and photos/ to be in ../WS Directory/
+
+After deploying apps_script/Code.gs as a Google Apps Script web app,
+paste the deployment URL into APPS_SCRIPT_URL below and rebuild.
 """
 
 import json
@@ -14,6 +17,9 @@ from pathlib import Path
 SRC_DIR  = Path(__file__).parent.parent / "WS Directory"
 REPO_DIR = Path(__file__).parent
 FAMILIES = SRC_DIR / "families.json"
+
+# Paste your Apps Script web app deployment URL here after deploying
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtLzQFp6JPzd7xEWPYP_2e3iK9MY98wfq98OZodxJq1f5iKGrq8H9G4mg1Q85kysfgbw/exec"
 
 with open(FAMILIES) as f:
     families = json.load(f)
@@ -84,18 +90,7 @@ for fam in families:
 
 members_js_array = "const MEMBERS = [\n  " + ",\n  ".join(rows) + "\n];"
 
-# ── Build EMBEDDINGS array (Float32, one row per family) ──────────────────────
-emb_rows = []
-for fam in families:
-    emb = fam.get("photo_embedding")
-    if emb:
-        emb_rows.append(f"new Float32Array([{','.join(str(v) for v in emb)}])")
-    else:
-        emb_rows.append("null")
-
-embeddings_js = "const EMBEDDINGS = [\n  " + ",\n  ".join(emb_rows) + "\n];"
-
-print(f"Built MEMBERS array: {len(rows)} families, {sum(1 for f in families if f.get('photo_embedding'))} with embeddings")
+print(f"Built MEMBERS array: {len(rows)} families")
 
 # ── Write index.html ─────────────────────────────────────────────────────────
 html = r"""<!DOCTYPE html>
@@ -284,50 +279,13 @@ html = r"""<!DOCTYPE html>
 
 <script>
 MEMBERS_DATA_PLACEHOLDER
-EMBEDDINGS_PLACEHOLDER
+
+const APPS_SCRIPT_URL = 'APPS_SCRIPT_URL_PLACEHOLDER';
 
 let filtered = [...MEMBERS];
 let currentTab = 'members';
 let mapInitialized = false;
 let map, markers = [], markerByIdx = {}, infoWindow;
-
-// ── Semantic search state ──────────────────────────────────────────────────
-let semanticReady = false;
-let semanticLoading = false;
-let embedFn = null;   // set once Transformers.js is ready
-
-const TRANSFORMERS_CDN = 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-const EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
-const SEMANTIC_THRESHOLD = 0.40;  // cosine similarity cutoff (tuned empirically)
-
-function cosineSim(a, b) {
-  // Both vectors are already L2-normalised (normalize_embeddings=True at build time)
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
-  return dot;
-}
-
-async function loadSemanticModel() {
-  if (semanticReady || semanticLoading) return;
-  semanticLoading = true;
-  setSearchHint('Loading semantic model… (first time only, ~22 MB)');
-  try {
-    const { pipeline } = await import(`${TRANSFORMERS_CDN}/dist/transformers.min.js`);
-    const pipe = await pipeline('feature-extraction', EMBED_MODEL, { quantized: true });
-    embedFn = async (text) => {
-      const out = await pipe(text, { pooling: 'mean', normalize: true });
-      return new Float32Array(out.data);
-    };
-    semanticReady = true;
-    setSearchHint('');
-    // Re-run current search now that model is ready
-    doSearch();
-  } catch(e) {
-    console.error('Semantic model load failed:', e);
-    setSearchHint('Semantic model unavailable — using keyword search');
-    semanticLoading = false;
-  }
-}
 
 function setSearchHint(msg) {
   let el = document.getElementById('searchHint');
@@ -340,9 +298,7 @@ function setSearchHint(msg) {
   el.textContent = msg;
 }
 
-// Start loading the model as soon as the user types anything
 document.getElementById('searchInput').addEventListener('input', (e) => {
-  if (e.target.value.trim() && !semanticReady && !semanticLoading) loadSemanticModel();
   document.getElementById('clearBtn').classList.toggle('visible', e.target.value.length > 0);
   doSearch();
 });
@@ -353,6 +309,7 @@ function clearSearch() {
   input.focus();
   document.getElementById('clearBtn').classList.remove('visible');
   filtered = [...MEMBERS];
+  setSearchHint('');
   render(filtered, '');
 }
 
@@ -403,12 +360,11 @@ function keywordMatch(m, terms) {
   return terms.some(t => hay.includes(t) || desc.includes(t));
 }
 
-// Debounce handle for async semantic search
 let _searchTimer = null;
+let _searchId = 0;
 
 function isDescriptiveQuery(q) {
-  // Use semantic search for 3+ word queries
-  // Short queries (names, phone, zip, single words) stay as keyword
+  // 3+ words → ask Haiku; short queries (names, phone, zip) → keyword only
   return q.split(/\s+/).length >= 3;
 }
 
@@ -416,45 +372,57 @@ function doSearch() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   if (!q) {
     filtered = [...MEMBERS];
+    setSearchHint('');
     render(filtered, q);
     return;
   }
 
   const terms = expandQuery(q);
-  const descriptive = isDescriptiveQuery(q);
 
-  // Short queries (name, phone, zip) → keyword only, instant
-  if (!descriptive) {
+  // Short queries → instant keyword search
+  if (!isDescriptiveQuery(q)) {
     filtered = MEMBERS.filter(m => keywordMatch(m, terms));
+    setSearchHint('');
     render(filtered, q);
     return;
   }
 
-  // Descriptive phrase (3+ words) → semantic search ranked by similarity
-  if (semanticReady && embedFn) {
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(async () => {
-      const queryVec = await embedFn(q);
-      const scored = MEMBERS.map((m, i) => {
-        const emb = EMBEDDINGS[i];
-        const sim = emb ? cosineSim(queryVec, emb) : 0;
-        return { m, sim };
-      }).filter(x => x.sim >= SEMANTIC_THRESHOLD)
-        .sort((a, b) => b.sim - a.sim);
+  // Descriptive phrase → ask Haiku via Apps Script
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => {
+    const thisSearch = ++_searchId;
+    setSearchHint('🔍 Searching…');
 
-      // If semantic returns nothing, fall back to keyword
-      filtered = scored.length > 0
-        ? scored.map(x => x.m)
-        : MEMBERS.filter(m => keywordMatch(m, terms));
+    const families = MEMBERS.map(m => ({ name: m.name, desc: m.photoDesc || '' }));
+
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ query: q, families }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (thisSearch !== _searchId) return; // stale — newer search in flight
       setSearchHint('');
+      if (data.error || !data.matches) {
+        console.error('Haiku search error:', data.error);
+        filtered = MEMBERS.filter(m => keywordMatch(m, terms));
+      } else {
+        const order = Object.fromEntries((data.matches).map((n, i) => [n, i]));
+        filtered = data.matches.length > 0
+          ? MEMBERS.filter(m => m.name in order).sort((a, b) => order[a.name] - order[b.name])
+          : MEMBERS.filter(m => keywordMatch(m, terms));
+      }
       render(filtered, q);
-    }, 120);
-  } else {
-    // Model still loading — show all results with a hint
-    filtered = [...MEMBERS];
-    render(filtered, q);
-    setSearchHint('⏳ Loading semantic model… results will refine shortly.');
-  }
+    })
+    .catch(err => {
+      if (thisSearch !== _searchId) return;
+      console.error('Search failed:', err);
+      setSearchHint('');
+      filtered = MEMBERS.filter(m => keywordMatch(m, terms));
+      render(filtered, q);
+    });
+  }, 400); // debounce — wait for user to stop typing
 }
 
 function render(list, q) {
@@ -657,7 +625,7 @@ function goToMap(idx) {
 </html>"""
 
 html = html.replace('MEMBERS_DATA_PLACEHOLDER', members_js_array)
-html = html.replace('EMBEDDINGS_PLACEHOLDER', embeddings_js)
+html = html.replace('APPS_SCRIPT_URL_PLACEHOLDER', APPS_SCRIPT_URL)
 
 out = REPO_DIR / "index.html"
 out.write_text(html, encoding="utf-8")

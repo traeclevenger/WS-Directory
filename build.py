@@ -128,7 +128,7 @@ html = r"""<!DOCTYPE html>
   .search-wrap { position: relative; }
   .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
   #searchInput {
-    width: 100%; padding: 11px 36px 11px 42px;
+    width: 100%; padding: 11px 64px 11px 42px;
     background: #f3f3f3; border: 1px solid #d0d0d0;
     border-radius: 10px; color: #1a1a1a;
     font-size: 0.95rem; outline: none; transition: border-color 0.2s;
@@ -139,7 +139,7 @@ html = r"""<!DOCTYPE html>
   /* suppress native clear button since we have our own */
   #searchInput::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
   #clearBtn {
-    display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    display: none; position: absolute; right: 36px; top: 50%; transform: translateY(-50%);
     width: 20px; height: 20px; border-radius: 50%; border: none; cursor: pointer;
     background: #bbb; color: #fff; font-size: 13px; line-height: 1;
     align-items: center; justify-content: center; padding: 0;
@@ -147,6 +147,17 @@ html = r"""<!DOCTYPE html>
   }
   #clearBtn.visible { display: flex; }
   #clearBtn:hover { background: #999; }
+  #micBtn {
+    display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+    background: transparent; color: #999; padding: 0;
+    align-items: center; justify-content: center;
+    transition: color 0.15s;
+  }
+  #micBtn.visible { display: flex; }
+  #micBtn:hover { color: #555; }
+  #micBtn.listening { color: #c0392b; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
   /* TABS */
   .tabs { display: flex; gap: 4px; padding: 12px 16px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -249,6 +260,9 @@ html = r"""<!DOCTYPE html>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="search" id="searchInput" placeholder="Search by name, address, phone, email, or photo description…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <button id="clearBtn" aria-label="Clear search" onclick="clearSearch()">✕</button>
+    <button id="micBtn" aria-label="Search by voice" title="Speak your search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V19c0 .55.45 1 1 1s1-.45 1-1v-1.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
+    </button>
   </div>
 </header>
 
@@ -311,6 +325,42 @@ function clearSearch() {
   filtered = [...MEMBERS];
   setSearchHint('');
   render(filtered, '');
+}
+
+// ── Voice search ───────────────────────────────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognition) {
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.add('visible');
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  let listening = false;
+
+  micBtn.addEventListener('click', () => {
+    if (listening) { recognition.stop(); return; }
+    recognition.start();
+  });
+
+  recognition.onstart = () => {
+    listening = true;
+    micBtn.classList.add('listening');
+    setSearchHint('🎙️ Listening…');
+  };
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    const input = document.getElementById('searchInput');
+    input.value = transcript;
+    document.getElementById('clearBtn').classList.add('visible');
+    setSearchHint('');
+    doSearch();
+  };
+  recognition.onerror = () => { setSearchHint(''); };
+  recognition.onend = () => {
+    listening = false;
+    micBtn.classList.remove('listening');
+  };
 }
 
 function esc(s) {
